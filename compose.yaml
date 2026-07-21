@@ -6,6 +6,24 @@
 #   - localstack (lab 04+)
 #   - redis, redpanda (labs siguientes)
 
-services: {}
+services: 
+  localstack:
+    image: localstack/localstack:3
+    container_name: datalake-localstack
+    environment:
+      SERVICES: iam,sts,s3,ec2,secretsmanager
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
-volumes: {}
+volumes: 
+
+  localstack-data:

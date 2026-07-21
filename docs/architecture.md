@@ -1,4 +1,4 @@
-# Arquitectura — {{PROJECT_NAME}}
+# Arquitectura — DataLake Pipeline AWS
 
 ## Diagrama
 

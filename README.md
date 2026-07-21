@@ -1,8 +1,8 @@
-# {{PROJECT_NAME}}
+# DataLake Pipeline AWS
 
 Proyecto integrador del módulo Cloud Computing (ITBA).
 
-> **Integrantes:** _completar con los miembros del grupo_
+> > **Integrantes:** Emanuel Feresin, Sebastián Castro, Federico Cavasin
 
 Arquitectura base: VPC + IAM + S3 + Cómputo + Base de datos, todo en LocalStack/Docker (local-first), con AWS real como referencia.
 

@@ -1,0 +1,35 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListSoloNuestrosPrefijos",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::datalake-ventas",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": ["raw/*", "processed/*", "curated/*"]
+        }
+      }
+    },
+    {
+      "Sid": "LeerRawProcessedCurated",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::datalake-ventas/raw/*",
+        "arn:aws:s3:::datalake-ventas/processed/*",
+        "arn:aws:s3:::datalake-ventas/curated/*"
+      ]
+    },
+    {
+      "Sid": "EscribirProcessedYCurated",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": [
+        "arn:aws:s3:::datalake-ventas/processed/*",
+        "arn:aws:s3:::datalake-ventas/curated/*"
+      ]
+    }
+  ]
+}

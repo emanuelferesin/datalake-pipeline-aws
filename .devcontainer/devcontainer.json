@@ -1,0 +1,35 @@
+{
+  "name": "proyecto-final-starter",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/aws-cli:1": {}
+  },
+
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y postgresql-client && python3 -m pip install -r requirements.txt",
+  "postStartCommand": "docker compose up -d",
+
+  "forwardPorts": [5432, 9000, 9001, 4566],
+  "portsAttributes": {
+    "5432": { "label": "PostgreSQL" },
+    "9000": { "label": "MinIO API" },
+    "9001": { "label": "MinIO Console" },
+    "4566": { "label": "LocalStack" }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker",
+        "hashicorp.terraform",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}

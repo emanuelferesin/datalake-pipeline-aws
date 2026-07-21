@@ -1,0 +1,11 @@
+# Servicios del proyecto.
+# Agregá acá los que tu arquitectura necesite.
+# Referencias en los labs del curso (cloud-foundations-lab):
+#   - postgres (lab 02)
+#   - minio (lab 02)
+#   - localstack (lab 04+)
+#   - redis, redpanda (labs siguientes)
+
+services: {}
+
+volumes: {}

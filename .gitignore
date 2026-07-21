@@ -1,0 +1,36 @@
+# Python
+*.pyc
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+
+# Env / secrets
+.env
+.env.local
+*.pem
+*.key
+
+# OS
+.DS_Store
+*.log
+
+# Data
+data/raw/**
+!data/raw/.gitkeep
+data/processed/**
+!data/processed/.gitkeep
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

@@ -54,3 +54,26 @@ afecta a ese lote, no a todos.
 Resultado: bucket datalake-ventas con BPA + encryption + versioning + bucket
 policy, y la convencion de _PROCESSED (se creara recien
 cuando armemos el batch job en la fase de EC2).
+
+### 003 — Subida mensual simulada en vez de subir todo el dataset junto
+
+Decision: escribimos un script (simulate_ingesta_mensual.py) que sube el dataset
+mes a mes a raw/sales/ingest_date=YYYY-MM/, en vez de subir el CSV completo de una.
+Antes de subir, chequea con head_object si ese mes ya esta en el bucket y si esta,
+no hace nada.
+
+Contexto: el dataset de Kaggle es un archivo estatico con 2 años de facturas, pero
+nuestra arquitectura esta pensada para lotes que llegan de a uno por mes. Si
+subiamos todo junto no ibamos a poder demostrar que el pipeline procesa solo lo
+nuevo, que es justo lo que le mostramos al profesor que ibamos a resolver.
+
+Alternativas: subir el CSV entero de una y particionarlo recien en el
+procesamiento (mas simple, pero no simula una llegada real, y no probamos la
+idempotencia en la parte de ingesta).
+
+Tradeoff: hay que correr el script varias veces (uno por mes) en vez de una sola
+carga, pero asi el bucket queda armado exactamente como se veria en la vida real,
+con historia y con huecos que se van llenando.
+
+Resultado: 4 de los 25 meses del dataset ya estan en el bucket (dic 2009 a
+marzo 2010), el resto lo vamos subiendo mas adelante corriendo el mismo script.

@@ -108,3 +108,25 @@ nunca se estaba usando hasta que lo movimos a iac/aws-local.tf.
 Resultado: terraform apply desde iac/ levanta el rol, las 3 policies y el bucket
 completo (BPA + encryption + versioning) en un solo comando, 7 recursos, probado
 dos veces incluyendo una recuperacion despues de perder el estado de LocalStack.
+
+### 005 — VPC solo con subred privada, sin Internet Gateway ni NAT
+
+Decision: la red del proyecto tiene una sola subred, privada, sin salida a
+Internet. El unico camino que tiene hacia afuera es un VPC endpoint Gateway
+hacia S3.
+
+Contexto: el batch job no sirve nada por HTTP ni recibe conexiones de nadie —
+solo lee y escribe en S3. 
+
+Alternativas: agregar subred publica + Internet Gateway igual, por si despues
+hace falta (por ejemplo para instalar paquetes en el arranque de la EC2 via
+apt/pip). O agregar un NAT Gateway para dar salida controlada.
+
+Tradeoff: si en algun momento el batch job necesita salir a Internet de verdad
+(una libreria que no esta en el user-data, una API externa), no va a poder —
+hay que agregar NAT explicitamente, con su costo. Elegimos no pagar ni exponer
+nada que no usamos todavia.
+
+Resultado: VPC 10.0.0.0/16, subred privada 10.0.2.0/24, VPC endpoint Gateway a
+S3 verificado (route table con ruta al prefix list de S3, estado "available").
+Sin IGW, sin subred publica, sin NAT.

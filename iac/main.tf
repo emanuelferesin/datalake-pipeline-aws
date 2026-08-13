@@ -43,3 +43,46 @@ resource "aws_s3_bucket_policy" "datalake" {
 
   depends_on = [aws_iam_role.batch_role]
 }
+
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = { Name = "datalake-vpc" }
+}
+
+resource "aws_subnet" "private" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "us-east-1b"
+
+  tags = { Name = "private-1b", Tier = "private" }
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+  tags   = { Name = "rt-private" }
+}
+
+resource "aws_route_table_association" "private" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.private.id
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.us-east-1.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.private.id]
+
+  tags = { Name = "vpce-s3" }
+}
+
+resource "aws_security_group" "app_private" {
+  name        = "app-private-sg"
+  description = "Batch job en subred privada"
+  vpc_id      = aws_vpc.main.id
+
+  tags = { Name = "app-private-sg" }
+}

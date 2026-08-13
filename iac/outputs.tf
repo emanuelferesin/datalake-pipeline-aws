@@ -1,6 +1,7 @@
-# Outputs que querés exponer al final del apply.
-# Ejemplo:
-#
-# output "bucket_arn" {
-#   value = aws_s3_bucket.data.arn
-# }
+output "bucket_name" {
+  value = aws_s3_bucket.datalake.id
+}
+
+output "batch_role_arn" {
+  value = aws_iam_role.batch_role.arn
+}

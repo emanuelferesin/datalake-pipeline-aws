@@ -77,3 +77,34 @@ con historia y con huecos que se van llenando.
 
 Resultado: 4 de los 25 meses del dataset ya estan en el bucket (dic 2009 a
 marzo 2010), el resto lo vamos subiendo mas adelante corriendo el mismo script.
+
+### 004 — Pasamos IAM y S3 de comandos sueltos a Terraform
+
+Decision: en vez de dejar el rol y el bucket armados a mano con comandos awslocal
+(como quedaron en las fases 2 y 3), los pasamos a Terraform (iac/main.tf), que
+lee los mismos JSON que ya teniamos (trust_policy.json, batch_role_policy.json,
+bucket_policy.json) sin reescribir nada.
+
+Contexto: no habia codigo que levante la infra descripta en los ADRs —
+todo lo habiamos hecho tipeando en la terminal, no quedaba nada
+reproducible. Ademas probamos en vivo que LocalStack Community pierde el estado
+con un simple "docker compose restart localstack" (no hace falta ni que pase
+tiempo) — el rol y el bucket desaparecen. Corrimos terraform plan despues del
+restart y detecto solo los 2 recursos borrados, sin duplicar nada: plan limpio
+de 7 a crear, 0 a cambiar, 0 a destruir. Eso confirma que la recuperacion es
+"terraform apply de nuevo", nada mas.
+
+Alternativas: escribir un script Python que repita los comandos (mas rapido de
+armar, pero sigue siendo imperativo — hay que acordarse de correrlo entero y en
+orden). Terraform en cambio es declarativo: describis el estado final y el
+compara contra lo que existe, por eso detecta solo lo que falta.
+
+Tradeoff: hubo que instalar Terraform a mano en el Codespace (no venia en el
+devcontainer, ya lo agregamos para el proximo) y debuggear por que el provider
+no se aplicaba — resulto ser que Terraform solo lee archivos .tf de la carpeta
+donde corres el comando, no de subcarpetas, asi que iac/providers/aws-local.tf
+nunca se estaba usando hasta que lo movimos a iac/aws-local.tf.
+
+Resultado: terraform apply desde iac/ levanta el rol, las 3 policies y el bucket
+completo (BPA + encryption + versioning) en un solo comando, 7 recursos, probado
+dos veces incluyendo una recuperacion despues de perder el estado de LocalStack.

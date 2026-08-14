@@ -117,3 +117,19 @@ resource "aws_instance" "batch" {
 
   tags = { Name = "datalake-batch", Role = "batch-processing" }
 }
+
+resource "aws_secretsmanager_secret" "db" {
+  name        = "app/db"
+  description = "Credencial de la base curated"
+}
+
+resource "aws_secretsmanager_secret_version" "db" {
+  secret_id = aws_secretsmanager_secret.db.id
+  secret_string = jsonencode({
+    username = "app"
+    password = var.db_password
+    dbname   = "appdb"
+    host     = "localhost"
+    port     = 5432
+  })
+}

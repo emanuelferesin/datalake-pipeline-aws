@@ -15,3 +15,10 @@ variable "region" {
   description = "Región del provider elegido"
   default     = "us-east-1"
 }
+
+variable "db_password" {
+  type        = string
+  description = "Password local del docker postgres (dev only, no es secreto real)"
+  default     = "postgres"
+  sensitive   = true
+}

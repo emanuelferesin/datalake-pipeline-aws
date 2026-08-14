@@ -178,3 +178,26 @@ Resultado: procese los 4 lotes cargados (dic 2009 a marzo 2010), cada uno con
 su processed/ y curated/, y el marcador _PROCESSED escrito. Corri el script
 una segunda vez y detecto que no habia nada pendiente — la idempotencia
 funciona.
+
+### 008 — Docker postgres en vez de RDS (no disponible en LocalStack Community), password desde Secrets Manager
+
+Decision: uso el postgres del compose.yaml como motor de la base curated, en vez
+de RDS. La credencial la genero con Terraform en Secrets Manager (app/db) y el
+script de carga la lee ahi en el momento, nunca la tengo escrita en el codigo.
+
+Contexto: RDS no esta disponible en LocalStack Community (es Pro, mismo
+problema que tuve con Auto Scaling en la fase anterior) — ni siquiera lo
+intente, ya lo sabia del lab 08. Pivote directo a lo que si puedo probar de
+verdad: el motor real de postgres en Docker.
+
+Alternativas: postgres-on-EC2 (self-managed, como muestra el lab 08) — la
+descarte porque no me suma nada frente a docker para este proyecto, y ademas
+la EC2 tampoco ejecuta user-data en este entorno, asi que no podria probarla.
+
+Tradeoff: docker postgres no tiene nada de lo que da RDS gratis (backups
+automaticos, Multi-AZ, point-in-time recovery) — en produccion usaria RDS de
+verdad, esto queda como equivalente de dev.
+
+Resultado: tabla ventas_por_pais con UPSERT por (country, ingest_date). Cargue
+los 4 lotes, 83 filas, corri el script una segunda vez y el conteo no cambio —
+la idempotencia funciona tambien en esta punta del pipeline.

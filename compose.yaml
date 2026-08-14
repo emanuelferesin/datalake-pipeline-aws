@@ -23,7 +23,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+  postgres:
+    image: postgres:16
+    container_name: datalake-postgres
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d appdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-volumes: 
-
+volumes:
   localstack-data:
+  postgres-data:

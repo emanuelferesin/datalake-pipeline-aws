@@ -130,3 +130,28 @@ nada que no usamos todavia.
 Resultado: VPC 10.0.0.0/16, subred privada 10.0.2.0/24, VPC endpoint Gateway a
 S3 verificado (route table con ruta al prefix list de S3, estado "available").
 Sin IGW, sin subred publica, sin NAT.
+
+### 006 — EC2 fija en vez de Auto Scaling Group (limite de LocalStack Community)
+
+Decision: en vez de un Auto Scaling Group (min=0, max=2, escala a demanda),
+provisiono una sola instancia EC2 fija con el instance profile de batch-role.
+
+Contexto: intenté crear el ASG con Terraform y LocalStack Community me devolvió
+501 "API for service autoscaling not yet implemented or pro feature" — es
+función paga, no se arregla con configuración. Me pasó lo mismo que con RDS
+en el lab 08.
+
+Alternativas: podía dejar el código del ASG en el repo sin aplicarlo
+(documentado pero no probado), o pivotar a un recurso que sí se pudiera crear
+y verificar de verdad. Elegí la segunda, para no dejar código "de mentira"
+en el repo.
+
+Tradeoff: perdí la posibilidad de probar el escalado real en este entorno.
+En AWS real, el diseño seguiría siendo un ASG con desired_capacity=0 en reposo,
+que escala a 1 cuando llega un lote nuevo (con un trigger que queda fuera del
+alcance del proyecto, no cursé EventBridge/Lambda) y vuelve a 0 al terminar.
+
+Resultado: creé la instancia EC2 única (i-04cb3878b1990dbfe) con instance
+profile, security group y subred privada, todo verificado. Dejo el diseño
+de Auto Scaling documentado como la versión de producción, no como algo que
+esté corriendo ahora.

@@ -84,5 +84,36 @@ resource "aws_security_group" "app_private" {
   description = "Batch job en subred privada"
   vpc_id      = aws_vpc.main.id
 
+  egress {
+    description     = "HTTPS a S3 via VPC endpoint"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [aws_vpc_endpoint.s3.prefix_list_id]
+  }
+
   tags = { Name = "app-private-sg" }
+}
+
+resource "aws_iam_instance_profile" "batch" {
+  name = "batch-instance-profile"
+  role = aws_iam_role.batch_role.name
+}
+
+resource "aws_instance" "batch" {
+  ami                    = "ami-0c02fb55956c7d316"
+  instance_type          = "t3.micro"
+  subnet_id              = aws_subnet.private.id
+  vpc_security_group_ids = [aws_security_group.app_private.id]
+  iam_instance_profile   = aws_iam_instance_profile.batch.name
+
+  user_data = <<-EOF
+    #!/bin/bash
+    # En AWS real esto instalaria dependencias y correria el batch job.
+    # La logica real vive en scripts/procesar_lote.py (se corre aparte,
+    # ver ADR: LocalStack Community no ejecuta user-data ni Auto Scaling).
+    echo "batch job placeholder"
+  EOF
+
+  tags = { Name = "datalake-batch", Role = "batch-processing" }
 }

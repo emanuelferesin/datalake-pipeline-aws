@@ -154,4 +154,27 @@ alcance del proyecto, no cursé EventBridge/Lambda) y vuelve a 0 al terminar.
 Resultado: creé la instancia EC2 única (i-04cb3878b1990dbfe) con instance
 profile, security group y subred privada, todo verificado. Dejo el diseño
 de Auto Scaling documentado como la versión de producción, no como algo que
-esté corriendo ahora.
+esté corriendo ahora.### 007 — Logica del batch job como script aparte, con marcador _PROCESSED real
+
+Decision: escribi la logica de transformacion (raw -> processed -> curated) en
+scripts/procesar_lote.py, en vez de meterla directo en el user-data de la EC2.
+Implementa el marcador _PROCESSED por lote que habia disenado en el ADR 002
+pero que todavia no estaba hecho.
+
+Contexto: como LocalStack Community no ejecuta el user-data (lo confirme en el
+lab 05), si dejaba la logica solo ahi no iba a poder probarla nunca en este
+entorno. Separandola en un script la puedo correr y verificar de verdad, y el
+user-data de la EC2 queda como el lugar donde reference este script en AWS real.
+
+Alternativas: meter la logica directo en el user-data igual, aceptando que no
+se puede probar en LocalStack. La descarte porque no queria tener codigo sin
+verificar en el repo.
+
+Tradeoff: hay una diferencia entre lo que "en teoria" corre la EC2 (el
+user-data) y lo que realmente probe (el script corrido a mano) — lo documento
+aca para que quede claro que es una limitacion del entorno, no del diseño.
+
+Resultado: procese los 4 lotes cargados (dic 2009 a marzo 2010), cada uno con
+su processed/ y curated/, y el marcador _PROCESSED escrito. Corri el script
+una segunda vez y detecto que no habia nada pendiente — la idempotencia
+funciona.

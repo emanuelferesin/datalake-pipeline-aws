@@ -4,88 +4,122 @@ Proyecto integrador del módulo Cloud Computing (ITBA).
 
 > > **Integrantes:** Emanuel Feresin, Sebastián Castro, Federico Cavasin
 
-Arquitectura base: VPC + IAM + S3 + Cómputo + Base de datos, todo en LocalStack/Docker (local-first), con AWS real como referencia.
+Arquitectura: VPC + IAM + S3 + Cómputo + Base de datos, provisionada con Terraform contra LocalStack/Docker (local-first), con AWS real como referencia.
+
+Pipeline: un dataset de ventas (Kaggle, `online_retail_II`) se ingesta mes a mes a `raw/`, se procesa a `processed/`/`curated/`, y se carga a PostgreSQL vía UPSERT. Ver [docs/architecture.md](docs/architecture.md) para el diagrama completo.
 
 ---
 
-## Cómo arrancar
+## Dataset
 
-### Opción A — GitHub "Use this template" (recomendado)
+El pipeline usa el dataset **"Online Retail II"** (transacciones de venta online
+UK, dic 2009 a dic 2011), disponible en Kaggle. Requiere cuenta de Kaggle para
+descargarlo — no se puede automatizar sin credenciales, es un paso manual:
 
-1. Click en **"Use this template"** arriba a la derecha de este repo
-2. Elegí nombre y dueño del repo nuevo (puede ser una organización del grupo)
-3. Cloná el repo nuevo a tu máquina o abrilo en Codespaces
-4. Corré `bin/init.sh "Tu Proyecto"` para personalizar README y docs
-5. Listo: arrancá agregando servicios al `compose.yaml`
+1. Buscar el dataset **"Online Retail II"** en Kaggle y descargar el CSV.
+2. Verificar que tenga (al menos) estas columnas: `Invoice, StockCode,
+   Description, Quantity, InvoiceDate, Price, CustomerID, Country`.
+3. Colocarlo en `data/raw/online_retail_II.csv` (la carpeta ya existe en el
+   repo, vacía salvo por un `.gitkeep`).
 
-### Opción B — Cookiecutter / script local
+Sin este archivo, `scripts/simulate_ingesta_mensual.py` falla al arrancar.
 
-Si preferís hacerlo desde la CLI sin pasar por la UI de GitHub:
+---
+
+## Cómo correrlo end-to-end
+
+### 1. Levantar los servicios locales
 
 ```bash
-# Cloná el starter
-git clone https://github.com/<owner>/proyecto-final-starter.git mi-proyecto
-cd mi-proyecto
-
-# Borrá la historia del template
-rm -rf .git
-
-# Personalizá
-./bin/init.sh "Mi Proyecto"
-
-# Arrancá un repo nuevo
-git init && git add . && git commit -m "init: proyecto final desde starter"
-
-# (opcional) creá el repo en GitHub
-gh repo create mi-proyecto --source=. --private --push
+docker compose up -d
 ```
+
+Esto levanta LocalStack (IAM, STS, S3, EC2, Secrets Manager) y Postgres.
+
+Si ya tenés algo corriendo en el puerto 5432, definí `POSTGRES_PORT` en un
+`.env` o en el shell (ej. `POSTGRES_PORT=5433 docker compose up -d`) para
+evitar el conflicto.
+
+### 2. Provisionar la infraestructura con Terraform
+
+```bash
+cd iac
+terraform init
+terraform plan
+terraform apply
+```
+
+Esto crea, en un solo comando: el rol `batch-role` (+ trust policy + policy S3/SQS/Logs), el bucket `datalake-ventas` (Block Public Access, encryption SSE-S3, versioning, bucket policy), la VPC con subred privada + VPC endpoint a S3, la EC2 con instance profile, el secret de Secrets Manager con la credencial de Postgres, la cola SQS `datalake-lotes-pendientes` y el log group de CloudWatch `/datalake/batch`.
+
+### 3. Instalar dependencias Python
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Correr el pipeline
+
+```bash
+# Subir un mes del dataset a raw/ (idempotente: no repite si ya está subido)
+# Al subir, avisa el lote nuevo encolando un mensaje en SQS
+python scripts/simulate_ingesta_mensual.py --mes 2009-12
+
+# Procesa los lotes avisados por SQS: raw/ -> processed/ + curated/
+python scripts/procesar_lote.py
+
+# Carga curated/ a la tabla ventas_por_pais en Postgres (UPSERT)
+python scripts/cargar_curated.py
+```
+
+Los 3 scripts loguean cada paso también en CloudWatch Logs (`/datalake/batch`), no solo por stdout.
 
 ---
 
-## Qué incluye el starter
-
-Solo estructura — sin servicios pre-armados. Vos elegís qué levantar y dónde.
+## Estructura del repo
 
 ```
 .
-├── .devcontainer/         # Codespaces listo: postgres-client, aws-cli, docker-in-docker
-├── compose.yaml           # Esqueleto vacío (services: {})
+├── compose.yaml           # LocalStack + Postgres
 ├── docs/
-│   ├── architecture.md    # Plantilla con tablas vacías
-│   └── decisions.md       # Formato ADR
+│   ├── architecture.md    # Diagrama y componentes
+│   └── decisions.md       # ADRs (10+ decisiones documentadas)
 ├── iam/
-│   ├── trust_policy.json  # Único molde reutilizable (EC2 assume role)
+│   ├── trust_policy.json       # EC2 assume role
+│   ├── batch_role_policy.json  # Permisos de batch-role por prefijo (S3 + SQS + Logs)
 │   └── README.md
+├── s3/
+│   └── bucket_policy.json # Bucket policy: solo batch-role puede acceder
 ├── scripts/
-│   └── README.md          # Guía de convenciones (idempotencia, no secretos)
+│   ├── simulate_ingesta_mensual.py  # Ingesta mensual simulada (idempotente), avisa por SQS
+│   ├── procesar_lote.py             # Consume SQS, raw/ -> processed/ + curated/
+│   ├── cargar_curated.py            # curated/ -> Postgres (UPSERT)
+│   ├── log_utils.py                 # Logger compartido hacia CloudWatch Logs
+│   └── README.md
+├── sql/
+│   └── 001_schema.sql     # Tabla ventas_por_pais
 ├── iac/
-│   ├── main.tf            # Donde van tus recursos
-│   ├── variables.tf       # project_name, environment, region
-│   ├── outputs.tf
-│   └── providers/
-│       ├── aws-local.tf.example     # AWS contra LocalStack
-│       ├── azure-local.tf.example   # Azure contra Azurite
-│       └── gcp-local.tf.example     # GCP contra emuladores
-├── requirements.txt       # boto3, psycopg2, awscli-local, pytest
-├── bin/init.sh            # Personaliza el starter con tu proyecto
-└── .gitignore
+│   ├── main.tf             # IAM role + S3 bucket + VPC + EC2 + Secrets Manager + SQS + CloudWatch Logs
+│   ├── aws-local.tf        # Provider AWS apuntando a LocalStack
+│   ├── variables.tf        # project_name, environment, region
+│   ├── outputs.tf          # bucket_name, batch_role_arn, queue_url, log_group_name
+│   └── README.md
+├── requirements.txt        # boto3, duckdb, psycopg2, pytest
+└── bin/init.sh
 ```
 
-Mirar `iac/README.md` para elegir provider local.
+Mirar [iac/README.md](iac/README.md) para más detalle del setup de Terraform.
 
 ---
 
-## Checklist del proyecto
+## Estado del proyecto
 
-Al final del módulo, este repo debería tener:
-
-- [ ] `docs/architecture.md` con tu diagrama y componentes
-- [ ] `docs/decisions.md` con al menos 5 decisiones documentadas (ADR)
-- [ ] `iam/` con los JSON de tu solución (trust + policies + bucket policy)
-- [ ] `scripts/` con al menos 3 demos automatizados (idempotentes)
-- [ ] `compose.yaml` con los servicios que tu arquitectura usa
-- [ ] Tests unitarios (`pytest` pasa)
-- [ ] README explicando cómo correrlo end-to-end
+- [x] `docs/architecture.md` con diagrama y componentes
+- [x] `docs/decisions.md` con ADRs documentados
+- [x] `iam/` + `s3/` con los JSON de la solución (trust + policies + bucket policy)
+- [x] `iac/main.tf` provisiona IAM + S3 + VPC + EC2 + Secrets Manager + SQS + CloudWatch Logs con Terraform
+- [x] `scripts/` con 3 demos automatizados e idempotentes (ingesta, procesamiento, carga)
+- [x] `compose.yaml` con los servicios (LocalStack, Postgres)
+- [ ] Tests unitarios (`pytest`)
 
 ---
 

@@ -201,3 +201,61 @@ verdad, esto queda como equivalente de dev.
 Resultado: tabla ventas_por_pais con UPSERT por (country, ingest_date). Cargue
 los 4 lotes, 83 filas, corri el script una segunda vez y el conteo no cambio —
 la idempotencia funciona tambien en esta punta del pipeline.
+
+### 009 — SQS para avisar lotes nuevos, en vez de listar S3 cada vez
+
+Decision: simulate_ingesta_mensual.py manda un mensaje a la cola SQS
+datalake-lotes-pendientes despues de subir un mes, y procesar_lote.py ahora
+consume esa cola (receive_message + delete_message) en vez de listar todos los
+prefijos de raw/sales/ con list_objects_v2 cada vez que corre.
+
+Contexto: el profesor marco que EC2 y Secrets Manager estaban habilitados en
+LocalStack pero no tenian un segundo servicio con uso real que los acompañe —
+list_objects_v2 sobre todo el bucket para encontrar lotes pendientes funciona,
+pero no escala (recorre todo raw/ cada vez) y no separa quien avisa que hay
+trabajo de quien lo hace. SQS esta disponible en LocalStack Community (a
+diferencia de RDS/Autoscaling, que ya confirmamos que son Pro), asi que se
+puede probar de verdad.
+
+Alternativas: dejar list_objects_v2 como esta (mas simple, ya funcionaba), o
+agregar EventBridge + Lambda para un trigger mas "serverless" (fuera de
+alcance del curso, no vimos Lambda).
+
+Tradeoff: hay que mantener la cola y borrar el mensaje despues de procesarlo
+(si no, LocalStack lo vuelve a entregar al vencer el visibility timeout).
+A cambio, procesar_lote.py ya no necesita recorrer el bucket entero, y el
+marcador _PROCESSED sigue como chequeo de idempotencia por si un mensaje
+llega duplicado.
+
+Resultado: probamos el flujo completo — subir un mes encola un mensaje,
+procesar_lote.py lo recibe, procesa el lote, escribe el marcador y borra el
+mensaje de la cola. Si el mensaje ya estaba marcado _PROCESSED (reintento),
+el script lo descarta sin reprocesar.
+
+### 010 — CloudWatch Logs para los 3 scripts del pipeline
+
+Decision: los tres scripts (simulate_ingesta_mensual.py, procesar_lote.py,
+cargar_curated.py) mandan cada linea de log a un log group centralizado en
+CloudWatch Logs (/datalake/batch), ademas de imprimirla por stdout. Se armo
+un helper compartido (scripts/log_utils.py) para no repetir el boto3 client
+en cada script.
+
+Contexto: hasta ahora cada script solo imprimia por print(), asi que la unica
+forma de saber que paso en una corrida era tener la terminal abierta en ese
+momento. Con varios scripts corriendo por separado (ingesta, procesamiento,
+carga), no habia un lugar unico para ver el historial de que lotes se
+procesaron y cuando.
+
+Alternativas: loguear a un archivo local (mas simple, pero no se comparte
+entre los 3 scripts ni sobrevive si se corren en maquinas distintas), o
+armar logging estructurado con niveles (INFO/ERROR) — lo descartamos por
+alcance, con un log group simple alcanza para lo que pide el proyecto.
+
+Tradeoff: cada corrida crea un log stream nuevo (con timestamp), asi que no
+hay un unico stream "acumulado" — para ver el historial completo hay que
+mirar el log group entero, no un stream especifico. Es un costo aceptable
+a cambio de no pisar logs de corridas anteriores.
+
+Resultado: log group /datalake/batch creado por Terraform, con retencion de
+14 dias. Cada script crea su log stream al arrancar y escribe ahi cada linea
+que tambien va a stdout, verificado con los 3 scripts corriendo en secuencia.

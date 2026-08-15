@@ -8,6 +8,8 @@ import json
 import boto3
 import psycopg2
 
+from log_utils import get_logger
+
 BUCKET = "datalake-ventas"
 
 s3 = boto3.client(
@@ -25,6 +27,8 @@ secrets = boto3.client(
     aws_secret_access_key="test",
     region_name="us-east-1",
 )
+
+log = get_logger("cargar_curated")
 
 
 def obtener_credencial():
@@ -67,7 +71,7 @@ def cargar_lote(conn, prefijo):
             )
             filas += 1
     conn.commit()
-    print(f"{prefijo}: {filas} filas cargadas (UPSERT)")
+    log(f"{prefijo}: {filas} filas cargadas (UPSERT)")
 
 
 if __name__ == "__main__":

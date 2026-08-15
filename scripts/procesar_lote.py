@@ -1,8 +1,10 @@
 """Procesa los lotes de raw/ que todavia no tienen marcador _PROCESSED:
 limpia el CSV, calcula el total de linea, y escribe processed/ y curated/.
 Es lo que en AWS real correria como user-data de la EC2 (LocalStack Community
-no lo ejecuta, por eso lo corro manual).
+no lo ejecuta, por eso lo corro manual). Los lotes a procesar se toman de la
+cola SQS datalake-lotes-pendientes, avisada por simulate_ingesta_mensual.py.
 """
+import json
 import os
 import sys
 import tempfile
@@ -10,7 +12,10 @@ import tempfile
 import boto3
 import duckdb
 
+from log_utils import get_logger
+
 BUCKET = "datalake-ventas"
+QUEUE_NAME = "datalake-lotes-pendientes"
 
 s3 = boto3.client(
     "s3",
@@ -20,19 +25,33 @@ s3 = boto3.client(
     region_name="us-east-1",
 )
 
+sqs = boto3.client(
+    "sqs",
+    endpoint_url="http://localhost:4566",
+    aws_access_key_id="test",
+    aws_secret_access_key="test",
+    region_name="us-east-1",
+)
 
-def lotes_pendientes():
-    resp = s3.list_objects_v2(Bucket=BUCKET, Prefix="raw/sales/", Delimiter="/")
-    prefijos = [p["Prefix"] for p in resp.get("CommonPrefixes", [])]
+log = get_logger("procesar_lote")
 
-    pendientes = []
-    for prefijo in prefijos:
-        marker_key = f"{prefijo}_PROCESSED"
-        try:
-            s3.head_object(Bucket=BUCKET, Key=marker_key)
-        except s3.exceptions.ClientError:
-            pendientes.append(prefijo)
-    return pendientes
+
+def recibir_mensajes_pendientes():
+    queue_url = sqs.get_queue_url(QueueName=QUEUE_NAME)["QueueUrl"]
+    resp = sqs.receive_message(
+        QueueUrl=queue_url, MaxNumberOfMessages=10, WaitTimeSeconds=2
+    )
+    mensajes = resp.get("Messages", [])
+    return queue_url, mensajes
+
+
+def ya_procesado(prefijo):
+    marker_key = f"{prefijo}_PROCESSED"
+    try:
+        s3.head_object(Bucket=BUCKET, Key=marker_key)
+        return True
+    except s3.exceptions.ClientError:
+        return False
 
 
 def procesar_lote(prefijo):
@@ -86,15 +105,23 @@ def procesar_lote(prefijo):
     os.remove(proc_local)
     os.remove(cur_local)
 
-    print(f"{mes}: procesado -> {proc_key} y {cur_key}")
+    log(f"{mes}: procesado -> {proc_key} y {cur_key}")
 
 
 if __name__ == "__main__":
-    pendientes = lotes_pendientes()
+    queue_url, mensajes = recibir_mensajes_pendientes()
 
-    if not pendientes:
-        print("No hay lotes pendientes de procesar")
+    if not mensajes:
+        log("No hay avisos pendientes en la cola")
         sys.exit(0)
 
-    for prefijo in pendientes:
-        procesar_lote(prefijo)
+    for mensaje in mensajes:
+        cuerpo = json.loads(mensaje["Body"])
+        prefijo = cuerpo["prefijo"]
+
+        if ya_procesado(prefijo):
+            log(f"{cuerpo['mes']}: ya tenia marcador _PROCESSED, se descarta el aviso")
+        else:
+            procesar_lote(prefijo)
+
+        sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=mensaje["ReceiptHandle"])

@@ -30,6 +30,26 @@
         "arn:aws:s3:::datalake-ventas/processed/*",
         "arn:aws:s3:::datalake-ventas/curated/*"
       ]
+    },
+    {
+      "Sid": "UsarColaDeLotesPendientes",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueUrl"
+      ],
+      "Resource": "arn:aws:sqs:*:*:datalake-lotes-pendientes"
+    },
+    {
+      "Sid": "EscribirLogsDelBatch",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*:*:log-group:/datalake/batch:*"
     }
   ]
 }

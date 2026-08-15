@@ -3,6 +3,7 @@ llegada de un reporte mensual. Idempotente: no vuelve a subir un mes
 que ya está en el bucket.
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -11,7 +12,10 @@ import tempfile
 import boto3
 import duckdb
 
+from log_utils import get_logger
+
 BUCKET = "datalake-ventas"
+QUEUE_NAME = "datalake-lotes-pendientes"
 CSV_LOCAL = "data/raw/online_retail_II.csv"
 
 s3 = boto3.client(
@@ -21,6 +25,16 @@ s3 = boto3.client(
     aws_secret_access_key="test",
     region_name="us-east-1",
 )
+
+sqs = boto3.client(
+    "sqs",
+    endpoint_url="http://localhost:4566",
+    aws_access_key_id="test",
+    aws_secret_access_key="test",
+    region_name="us-east-1",
+)
+
+log = get_logger("simulate_ingesta_mensual")
 
 
 def conectar_dataset():
@@ -45,6 +59,15 @@ def ya_subido(mes):
         return False
 
 
+def avisar_lote_pendiente(mes, prefijo):
+    queue_url = sqs.get_queue_url(QueueName=QUEUE_NAME)["QueueUrl"]
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=json.dumps({"mes": mes, "prefijo": prefijo}),
+    )
+    log(f"{mes}: aviso encolado en {QUEUE_NAME}")
+
+
 def subir_mes(con, mes):
     if not re.fullmatch(r"\d{4}-\d{2}", mes):
         print(f"Formato de mes invalido: {mes} (esperado YYYY-MM)")
@@ -52,7 +75,7 @@ def subir_mes(con, mes):
 
     key = f"raw/sales/ingest_date={mes}/ventas.csv"
     if ya_subido(mes):
-        print(f"{mes}: ya estaba subido ({key}), no se repite")
+        log(f"{mes}: ya estaba subido ({key}), no se repite")
         return
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
@@ -65,7 +88,8 @@ def subir_mes(con, mes):
 
     s3.upload_file(tmp_path, BUCKET, key)
     os.remove(tmp_path)
-    print(f"{mes}: subido a s3://{BUCKET}/{key}")
+    log(f"{mes}: subido a s3://{BUCKET}/{key}")
+    avisar_lote_pendiente(mes, f"raw/sales/ingest_date={mes}/")
 
 
 if __name__ == "__main__":
@@ -79,11 +103,11 @@ if __name__ == "__main__":
     if args.list:
         for (mes,) in listar_meses(con):
             estado = "subido" if ya_subido(mes) else "pendiente"
-            print(f"{mes}  [{estado}]")
+            log(f"{mes}  [{estado}]")
         sys.exit(0)
 
     if not args.mes:
-        print("Usar --list para ver meses disponibles, o --mes YYYY-MM para subir uno")
+        log("Usar --list para ver meses disponibles, o --mes YYYY-MM para subir uno")
         sys.exit(1)
 
     subir_mes(con, args.mes)

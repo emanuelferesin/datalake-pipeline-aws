@@ -133,3 +133,13 @@ resource "aws_secretsmanager_secret_version" "db" {
     port     = 5432
   })
 }
+
+resource "aws_sqs_queue" "lotes_pendientes" {
+  name                       = "datalake-lotes-pendientes"
+  visibility_timeout_seconds = 60
+}
+
+resource "aws_cloudwatch_log_group" "batch" {
+  name              = "/datalake/batch"
+  retention_in_days = 14
+}

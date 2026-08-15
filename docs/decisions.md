@@ -134,73 +134,80 @@ Sin IGW, sin subred publica, sin NAT.
 ### 006 — EC2 fija en vez de Auto Scaling Group (limite de LocalStack Community)
 
 Decision: en vez de un Auto Scaling Group (min=0, max=2, escala a demanda),
-provisiono una sola instancia EC2 fija con el instance profile de batch-role.
+provisionamos una sola instancia EC2 fija con el instance profile de batch-role.
 
-Contexto: intenté crear el ASG con Terraform y LocalStack Community me devolvió
-501 "API for service autoscaling not yet implemented or pro feature" — es
-función paga, no se arregla con configuración. Me pasó lo mismo que con RDS
-en el lab 08.
+Contexto: intentamos crear el ASG con Terraform y LocalStack Community nos
+devolvió 501 "API for service autoscaling not yet implemented or pro feature"
+— es función paga, no se arregla con configuración. Nos pasó lo mismo que con
+RDS en el lab 08.
 
-Alternativas: podía dejar el código del ASG en el repo sin aplicarlo
+Alternativas: podíamos dejar el código del ASG en el repo sin aplicarlo
 (documentado pero no probado), o pivotar a un recurso que sí se pudiera crear
-y verificar de verdad. Elegí la segunda, para no dejar código "de mentira"
+y verificar de verdad. Elegimos la segunda, para no dejar código "de mentira"
 en el repo.
 
-Tradeoff: perdí la posibilidad de probar el escalado real en este entorno.
+Tradeoff: perdimos la posibilidad de probar el escalado real en este entorno.
 En AWS real, el diseño seguiría siendo un ASG con desired_capacity=0 en reposo,
 que escala a 1 cuando llega un lote nuevo (con un trigger que queda fuera del
-alcance del proyecto, no cursé EventBridge/Lambda) y vuelve a 0 al terminar.
+alcance del proyecto, no cursamos EventBridge/Lambda) y vuelve a 0 al terminar.
 
-Resultado: creé la instancia EC2 única (i-04cb3878b1990dbfe) con instance
-profile, security group y subred privada, todo verificado. Dejo el diseño
+Resultado: creamos la instancia EC2 única (i-04cb3878b1990dbfe) con instance
+profile, security group y subred privada, todo verificado. Dejamos el diseño
 de Auto Scaling documentado como la versión de producción, no como algo que
-esté corriendo ahora.### 007 — Logica del batch job como script aparte, con marcador _PROCESSED real
+esté corriendo ahora.
 
-Decision: escribi la logica de transformacion (raw -> processed -> curated) en
-scripts/procesar_lote.py, en vez de meterla directo en el user-data de la EC2.
-Implementa el marcador _PROCESSED por lote que habia disenado en el ADR 002
-pero que todavia no estaba hecho.
+### 007 — Logica del batch job como script aparte, con marcador _PROCESSED real
 
-Contexto: como LocalStack Community no ejecuta el user-data (lo confirme en el
-lab 05), si dejaba la logica solo ahi no iba a poder probarla nunca en este
-entorno. Separandola en un script la puedo correr y verificar de verdad, y el
-user-data de la EC2 queda como el lugar donde reference este script en AWS real.
+Decision: escribimos la logica de transformacion (raw -> processed -> curated)
+en scripts/procesar_lote.py, en vez de meterla directo en el user-data de la
+EC2. Implementa el marcador _PROCESSED por lote que habiamos disenado en el
+ADR 002 pero que todavia no estaba hecho.
+
+Contexto: como LocalStack Community no ejecuta el user-data (lo confirmamos en
+el lab 05), si dejabamos la logica solo ahi no ibamos a poder probarla nunca en
+este entorno. Separandola en un script la podemos correr y verificar de verdad,
+y el user-data de la EC2 queda como el lugar donde referencia este script en
+AWS real.
 
 Alternativas: meter la logica directo en el user-data igual, aceptando que no
-se puede probar en LocalStack. La descarte porque no queria tener codigo sin
-verificar en el repo.
+se puede probar en LocalStack. La descartamos porque no queriamos tener codigo
+sin verificar en el repo.
 
 Tradeoff: hay una diferencia entre lo que "en teoria" corre la EC2 (el
-user-data) y lo que realmente probe (el script corrido a mano) — lo documento
-aca para que quede claro que es una limitacion del entorno, no del diseño.
+user-data) y lo que realmente probamos (el script corrido a mano) — lo
+documentamos aca para que quede claro que es una limitacion del entorno, no
+del diseño.
 
-Resultado: procese los 4 lotes cargados (dic 2009 a marzo 2010), cada uno con
-su processed/ y curated/, y el marcador _PROCESSED escrito. Corri el script
-una segunda vez y detecto que no habia nada pendiente — la idempotencia
-funciona.
+Resultado: procesamos los 4 lotes cargados (dic 2009 a marzo 2010), cada uno
+con su processed/ y curated/, y el marcador _PROCESSED escrito. Corrimos el
+script una segunda vez y detectamos que no habia nada pendiente — la
+idempotencia funciona.
 
 ### 008 — Docker postgres en vez de RDS (no disponible en LocalStack Community), password desde Secrets Manager
 
-Decision: uso el postgres del compose.yaml como motor de la base curated, en vez
-de RDS. La credencial la genero con Terraform en Secrets Manager (app/db) y el
-script de carga la lee ahi en el momento, nunca la tengo escrita en el codigo.
+Decision: usamos el postgres del compose.yaml como motor de la base curated,
+en vez de RDS. La credencial la generamos con Terraform en Secrets Manager
+(app/db) y el script de carga la lee ahi en el momento, nunca la tenemos
+escrita en el codigo.
 
 Contexto: RDS no esta disponible en LocalStack Community (es Pro, mismo
-problema que tuve con Auto Scaling en la fase anterior) — ni siquiera lo
-intente, ya lo sabia del lab 08. Pivote directo a lo que si puedo probar de
-verdad: el motor real de postgres en Docker.
+problema que tuvimos con Auto Scaling en la fase anterior) — ni siquiera lo
+intentamos, ya lo sabiamos del lab 08. Pivoteamos directo a lo que si podemos
+probar de verdad: el motor real de postgres en Docker.
 
 Alternativas: postgres-on-EC2 (self-managed, como muestra el lab 08) — la
-descarte porque no me suma nada frente a docker para este proyecto, y ademas
-la EC2 tampoco ejecuta user-data en este entorno, asi que no podria probarla.
+descartamos porque no nos suma nada frente a docker para este proyecto, y
+ademas la EC2 tampoco ejecuta user-data en este entorno, asi que no podriamos
+probarla.
 
 Tradeoff: docker postgres no tiene nada de lo que da RDS gratis (backups
-automaticos, Multi-AZ, point-in-time recovery) — en produccion usaria RDS de
-verdad, esto queda como equivalente de dev.
+automaticos, Multi-AZ, point-in-time recovery) — en produccion usariamos RDS
+de verdad, esto queda como equivalente de dev.
 
-Resultado: tabla ventas_por_pais con UPSERT por (country, ingest_date). Cargue
-los 4 lotes, 83 filas, corri el script una segunda vez y el conteo no cambio —
-la idempotencia funciona tambien en esta punta del pipeline.
+Resultado: tabla ventas_por_pais con UPSERT por (country, ingest_date).
+Cargamos los 4 lotes, 83 filas, corrimos el script una segunda vez y el
+conteo no cambio — la idempotencia funciona tambien en esta punta del
+pipeline.
 
 ### 009 — SQS para avisar lotes nuevos, en vez de listar S3 cada vez
 

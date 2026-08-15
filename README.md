@@ -10,6 +10,22 @@ Pipeline: un dataset de ventas (Kaggle, `online_retail_II`) se ingesta mes a mes
 
 ---
 
+## Dataset
+
+El pipeline usa el dataset **"Online Retail II"** (transacciones de venta online
+UK, dic 2009 a dic 2011), disponible en Kaggle. Requiere cuenta de Kaggle para
+descargarlo — no se puede automatizar sin credenciales, es un paso manual:
+
+1. Buscar el dataset **"Online Retail II"** en Kaggle y descargar el CSV.
+2. Verificar que tenga (al menos) estas columnas: `Invoice, StockCode,
+   Description, Quantity, InvoiceDate, Price, CustomerID, Country`.
+3. Colocarlo en `data/raw/online_retail_II.csv` (la carpeta ya existe en el
+   repo, vacía salvo por un `.gitkeep`).
+
+Sin este archivo, `scripts/simulate_ingesta_mensual.py` falla al arrancar.
+
+---
+
 ## Cómo correrlo end-to-end
 
 ### 1. Levantar los servicios locales
@@ -19,6 +35,10 @@ docker compose up -d
 ```
 
 Esto levanta LocalStack (IAM, STS, S3, EC2, Secrets Manager) y Postgres.
+
+Si ya tenés algo corriendo en el puerto 5432, definí `POSTGRES_PORT` en un
+`.env` o en el shell (ej. `POSTGRES_PORT=5433 docker compose up -d`) para
+evitar el conflicto.
 
 ### 2. Provisionar la infraestructura con Terraform
 

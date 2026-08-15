@@ -93,36 +93,41 @@ para un número exacto usar la AWS Pricing Calculator.
 - La credencial de RDS vive en Secrets Manager, nunca en el código ni en variables de entorno commiteadas.
 - El acceso a la cola SQS y al log group de CloudWatch está acotado por ARN en la misma policy de `batch-role`, no son permisos nuevos por fuera del modelo de mínimo privilegio.
 
-## Cronograma
+## Cronograma de migración
 
-Estimación de tiempos para reproducir este proyecto desde cero, siguiendo los
-pasos de ["Cómo correrlo end-to-end"](../README.md#cómo-correrlo-end-to-end)
-del README. Pensado para alguien que clona el repo y no tiene nada corriendo
-todavía — no son fechas de calendario, son duraciones relativas al arranque.
+Plan de migración del proceso actual (reportes de ventas armados a mano) hacia
+el pipeline en AWS. Cuatro etapas: preparación, prueba, corte y validación.
 
-```mermaid
+​```mermaid
 gantt
-    title Cronograma de reproducción del proyecto
-    dateFormat  YYYY-MM-DD HH:mm
-    axisFormat  %H:%M
-    section Entorno local
-    Clonar repo + leer README/architecture.md        :done, clone, 2026-01-01 09:00, 10m
-    docker compose up -d (LocalStack + Postgres)     :env, after clone, 5m
-    section Infraestructura (Terraform)
-    terraform init                                   :tfinit, after env, 5m
-    terraform plan                                   :tfplan, after tfinit, 5m
-    terraform apply (IAM+S3+VPC+EC2+RDS+SQS+Logs)    :tfapply, after tfplan, 10m
-    section Dependencias Python
-    pip install -r requirements.txt                  :deps, after tfapply, 5m
-    section Pipeline end-to-end
-    Ingesta simulada de un mes (--mes YYYY-MM)       :ingesta, after deps, 5m
-    Procesamiento del lote (consume SQS)             :proc, after ingesta, 10m
-    Carga a Postgres (UPSERT)                        :carga, after proc, 5m
-    section Verificación
-    Revisar CloudWatch Logs + tabla ventas_por_pais  :verif, after carga, 10m
-```
+    title Cronograma de migracion - Pipeline de datos de ventas a AWS
+    dateFormat YYYY-MM-DD
+    axisFormat %d/%m
 
-Total estimado: **~70 minutos** para tener el pipeline completo corriendo una
-vez, de punta a punta, en una máquina nueva. Repetir solo la sección "Pipeline
-end-to-end" para meses adicionales toma ~20 minutos (no hace falta rehacer
-`terraform apply` salvo que se haya perdido el estado de LocalStack, ver ADR 004).
+    section Preparacion
+    Relevar proceso actual (como se generan/reciben los reportes hoy)   :prep1, 2026-09-01, 3d
+    Provisionar infra en cuenta AWS real (terraform apply)               :prep2, after prep1, 2d
+    Configurar accesos y politicas de seguridad                         :prep3, after prep2, 2d
+    Documentar runbooks y plan de rollback                              :prep4, after prep3, 2d
+
+    section Prueba
+    Cargar datos historicos de prueba (no productivos)                  :test1, after prep4, 2d
+    Correr el pipeline completo end-to-end en staging                   :test2, after test1, 2d
+    Reconciliar resultados contra el calculo manual actual              :test3, after test2, 3d
+    Simular fallas (archivo faltante, EC2 caida) y validar recuperacion :test4, after test3, 2d
+
+    section Corte
+    Congelar el proceso manual (freeze)                                 :cut1, after test4, 1d
+    Migrar el ultimo lote pendiente                                     :cut2, after cut1, 1d
+    Apagar el proceso viejo, activar el pipeline nuevo                  :cut3, after cut2, 1d
+
+    section Validacion
+    Correr en paralelo y comparar contra el proceso anterior            :val1, after cut3, 5d
+    Validacion con el area de negocio (numeros de ventas por pais)      :val2, after val1, 2d
+    Cierre formal de la migracion                                       :val3, after val2, 1d
+​```
+
+Duración total estimada: **~6 semanas** (29 días hábiles), de las cuales el
+corte en sí — el momento de mayor riesgo — dura sólo 3 días. El grueso del
+tiempo está en preparación y prueba, a propósito: es donde se reduce el riesgo
+antes de tocar el proceso real.
